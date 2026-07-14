@@ -1501,7 +1501,6 @@ function render(){
   else renderHome();
 }
 
-renderDialStrip();
 document.getElementById('homeLink').addEventListener('click', ()=>{
   state.tab = 'home';
   state.openFacility = null;
@@ -1543,6 +1542,7 @@ if('serviceWorker' in navigator){
 (async function init(){
   await loadData();
   render();
+  renderDialStrip();
 })();
 </script>
 </body>
