@@ -226,7 +226,8 @@
   .source-note{ text-align:center; color:var(--muted); font-size:11.5px; margin:26px 0 6px; }
 
   /* facilities grid + dedicated facility page */
-  .facility-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:16px 10px; margin-bottom:14px; }
+  .facility-grid{ display:grid; grid-template-columns:repeat(auto-fit, 78px); justify-content:center; gap:18px 12px; margin-bottom:14px; }
+  .home-divider{ height:1px; background:var(--line); margin:22px 0; }
   .facility-tile{
     background:none; border:none; cursor:pointer; font-family:inherit;
     display:flex; flex-direction:column; align-items:center; gap:7px; padding:4px;
@@ -266,7 +267,7 @@
     <div class="top-row">
       <div>
         <span class="eyebrow">Machneyuda Group</span>
-        <div class="hero-wrap"><h1>ITSIK HAS LEFT THE BUILDING</h1></div>
+        <div class="hero-wrap" id="homeLink" style="cursor:pointer;"><h1>ITSIK HAS LEFT THE BUILDING</h1></div>
         <div class="hero-rule"></div>
         <p class="sub">תיק חירום ותפעול — גישה מהירה לכל מה שצריך כדי להפעיל יחידה, גם בלי מי שרגיל להפעיל אותה</p>
       </div>
@@ -288,8 +289,6 @@
 <div class="search-wrap">
   <input class="search-box" id="searchBox" type="text" placeholder="חיפוש — שם, תפקיד, ספק, יחידה...">
 </div>
-<nav class="tabs" id="tabNav"></nav>
-
 
 <main id="content"></main>
 
@@ -461,7 +460,7 @@ function defaultLicenses(){
 }
 
 let UNITS, PROVIDERS, DECISION_CHAIN, EVACUATION, INTERNAL_CONTACTS, LICENSES;
-let state = { tab:'facilities', query:'', openFacility:null, openCategory:null, editMode:false };
+let state = { tab:'home', query:'', openFacility:null, openCategory:null, editMode:false };
 
 // Real, persistent on-device storage (works standalone / installed as an app — no external service needed)
 const STORAGE_PREFIX = 'itzik-lo-po:';
@@ -549,24 +548,11 @@ function renderDialStrip(){
   `).join('');
 }
 
-const TABS = [
-  {id:'facilities', name:'מתקנים'},
-  {id:'contacts', name:'אנשי קשר וספקים'},
-  {id:'internal', name:'אינדקס'},
-  {id:'emergency', name:'חירום'},
+const HOME_SECTIONS = [
+  {id:'contacts', name:'אנשי קשר וספקים', icon:'📞'},
+  {id:'internal', name:'אינדקס', icon:'🗂️'},
+  {id:'emergency', name:'חירום', icon:'🚨'},
 ];
-
-function renderTabs(){
-  const nav = document.getElementById('tabNav');
-  nav.innerHTML = '';
-  TABS.forEach(t=>{
-    const btn = document.createElement('button');
-    btn.className = 'tab-btn' + (state.tab===t.id ? ' active':'');
-    btn.textContent = t.name;
-    btn.onclick = ()=>{ state.tab=t.id; state.openFacility=null; render(); };
-    nav.appendChild(btn);
-  });
-}
 
 function matchesQuery(text){
   if(!state.query) return true;
@@ -755,20 +741,25 @@ function newDefaultInfra(){
 }
 
 // ---------------- FACILITIES (מתקנים: מתקן + בירוקרטיה מאוחדים) ----------------
-function renderFacilities(){
+function renderHome(){
   const content = document.getElementById('content');
-  const filtered = UNITS.filter(u =>
+  const filteredUnits = UNITS.filter(u =>
     matchesQuery(u.name) || matchesQuery(u.manager) || matchesQuery(u.chef) || matchesQuery(u.address)
   );
   content.innerHTML = `
+    <div class="section-label" style="text-align:center;">מתקנים</div>
     <div class="facility-grid" id="facilityGrid"></div>
-    ${state.editMode ? '<button class="add-btn" id="addUnit">+ הוסף מתקן חדש</button>' : ''}
+    ${state.editMode ? `<div style="text-align:center;"><button class="add-btn" id="addUnit" style="width:auto; padding:9px 18px;">+ הוסף מתקן חדש</button></div>` : ''}
+    <div class="home-divider"></div>
+    <div class="section-label" style="text-align:center;">עוד באפליקציה</div>
+    <div class="facility-grid" id="homeSectionGrid"></div>
   `;
+
   const grid = content.querySelector('#facilityGrid');
-  if(filtered.length===0){
+  if(filteredUnits.length===0){
     grid.innerHTML = `<div class="pending-box"><div class="big">🔍</div>לא נמצאו מתקנים תואמים לחיפוש</div>`;
   }
-  filtered.forEach(u=>{
+  filteredUnits.forEach(u=>{
     const tile = document.createElement('button');
     tile.className = 'facility-tile';
     tile.innerHTML = `
@@ -795,12 +786,28 @@ function renderFacilities(){
       render();
     });
   }
+
+  const sectionGrid = content.querySelector('#homeSectionGrid');
+  HOME_SECTIONS.forEach(s=>{
+    const tile = document.createElement('button');
+    tile.className = 'facility-tile';
+    tile.innerHTML = `
+      <div class="facility-logo"><span style="font-size:26px;">${s.icon}</span></div>
+      <div class="facility-name">${s.name}</div>
+    `;
+    tile.addEventListener('click', ()=>{
+      state.tab = s.id;
+      state.openFacility = null;
+      render();
+    });
+    sectionGrid.appendChild(tile);
+  });
 }
 
 function renderFacilityDetail(u){
   const content = document.getElementById('content');
   content.innerHTML = `
-    <button class="back-btn" id="facilityBack">→ חזרה למתקנים</button>
+    <button class="back-btn" id="facilityBack">→ חזרה לדף הראשי</button>
     <div class="card" id="facilityHeaderCard"></div>
     <div class="card">
       <div class="section-label">תשתיות ופרטים תפעוליים</div>
@@ -814,6 +821,7 @@ function renderFacilityDetail(u){
   `;
   content.querySelector('#facilityBack').addEventListener('click', ()=>{
     state.openFacility = null;
+    state.tab = 'home';
     render();
   });
 
@@ -1369,31 +1377,31 @@ function renderInternal(){
   });
 }
 
-// ---------------- LICENSES ----------------
 function render(){
-  const inFacilityDetail = state.tab==='facilities' && !!state.openFacility;
+  const inFacilityDetail = !!state.openFacility;
   document.querySelector('.search-wrap').style.display = inFacilityDetail ? 'none' : '';
-  document.getElementById('tabNav').style.display = inFacilityDetail ? 'none' : '';
-  renderTabs();
   document.getElementById('editBanner').classList.toggle('show', state.editMode);
   document.getElementById('settingsBtn').classList.toggle('active', state.editMode);
-  if(state.tab==='emergency') renderEmergency();
-  else if(state.tab==='facilities'){
-    if(state.openFacility){
-      const u = UNITS.find(x=>x.id===state.openFacility);
-      if(u) renderFacilityDetail(u); else { state.openFacility=null; renderFacilities(); }
-    } else {
-      renderFacilities();
-    }
-  }
+  if(inFacilityDetail){
+    const u = UNITS.find(x=>x.id===state.openFacility);
+    if(u) renderFacilityDetail(u); else { state.openFacility=null; renderHome(); }
+  } else if(state.tab==='emergency') renderEmergency();
   else if(state.tab==='contacts') renderContacts();
   else if(state.tab==='internal') renderInternal();
+  else renderHome();
 }
 
 renderDialStrip();
+document.getElementById('homeLink').addEventListener('click', ()=>{
+  state.tab = 'home';
+  state.openFacility = null;
+  state.query = '';
+  document.getElementById('searchBox').value = '';
+  render();
+});
 document.getElementById('searchBox').addEventListener('input', (e)=>{
   state.query = e.target.value;
-  if(state.tab==='emergency') state.tab='facilities';
+  if(state.tab==='emergency') state.tab='home';
   render();
 });
 document.getElementById('settingsBtn').addEventListener('click', ()=>{
