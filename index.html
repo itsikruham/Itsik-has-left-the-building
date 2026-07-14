@@ -489,8 +489,8 @@ function renderDialStrip(){
 const TABS = [
   {id:'units', name:'מתקן'},
   {id:'contacts', name:'אנשי קשר וספקים'},
-  {id:'internal', name:'אנשי קשר בארגון'},
-  {id:'licenses', name:'ניירת'},
+  {id:'internal', name:'אינדקס'},
+  {id:'licenses', name:'בירוקרטיה'},
   {id:'emergency', name:'חירום'},
 ];
 
@@ -511,6 +511,14 @@ function matchesQuery(text){
   return (text||'').toLowerCase().includes(state.query.toLowerCase());
 }
 function esc(s){ return (s||'').replace(/"/g,'&quot;'); }
+function moveItem(arr, index, direction){
+  const newIndex = index + direction;
+  if(index<0 || newIndex<0 || newIndex>=arr.length) return false;
+  const tmp = arr[index];
+  arr[index] = arr[newIndex];
+  arr[newIndex] = tmp;
+  return true;
+}
 
 // ---------------- EMERGENCY ----------------
 function renderEmergency(){
@@ -525,6 +533,7 @@ function renderEmergency(){
     <div class="card">
       <div class="section-label">נוהל פינוי</div>
       <div id="evacWrap"></div>
+      ${state.editMode ? `<button class="add-btn small" id="addEvacRow">+ הוסף מצב חירום</button>` : ''}
     </div>
   `;
   const chainWrap = content.querySelector('#chainWrap');
@@ -590,17 +599,45 @@ function renderEmergency(){
     `).join('');
   } else {
     EVACUATION.forEach((e)=>{
+      const idx = EVACUATION.indexOf(e);
       const row = document.createElement('div');
       row.className = 'provider-block';
       row.innerHTML = `
-        <div style="font-weight:700; font-size:13.5px; margin-bottom:6px;">${e.type} <span style="color:var(--muted); font-weight:400; font-size:12px;">· ${e.hotline}</span></div>
-        <input class="edit-in" data-f="point" value="${esc(e.point)}" placeholder="נקודת התכנסות">
+        <div class="provider-edit-head">
+          <input class="edit-in" data-f="type" value="${esc(e.type)}" placeholder="סוג אירוע" style="font-weight:700;">
+          <button class="del-x move-up" title="הזז למעלה">▲</button>
+          <button class="del-x move-down" title="הזז למטה">▼</button>
+          <button class="del-x" title="מחק מצב">✕</button>
+        </div>
+        <div class="meta-edit-row" style="margin-bottom:6px;">
+          <input class="edit-in" data-f="point" value="${esc(e.point)}" placeholder="נקודת התכנסות">
+          <input class="edit-in" data-f="hotline" value="${esc(e.hotline)}" placeholder="גורם לחיוג (למשל: מכבי אש — 102)">
+        </div>
       `;
-      row.querySelector('[data-f]').addEventListener('change', async (ev)=>{
-        e.point = ev.target.value;
+      row.querySelectorAll('[data-f]').forEach(inp=>{
+        inp.addEventListener('change', async ()=>{
+          e[inp.dataset.f] = inp.value;
+          await persist('evac-override', EVACUATION);
+        });
+      });
+      row.querySelector('.move-up').addEventListener('click', async ()=>{
+        if(moveItem(EVACUATION, EVACUATION.indexOf(e), -1)){ await persist('evac-override', EVACUATION); renderEmergency(); }
+      });
+      row.querySelector('.move-down').addEventListener('click', async ()=>{
+        if(moveItem(EVACUATION, EVACUATION.indexOf(e), 1)){ await persist('evac-override', EVACUATION); renderEmergency(); }
+      });
+      row.querySelectorAll('.del-x')[2].addEventListener('click', async ()=>{
+        const i = EVACUATION.indexOf(e);
+        if(i>-1) EVACUATION.splice(i,1);
         await persist('evac-override', EVACUATION);
+        renderEmergency();
       });
       evacWrap.appendChild(row);
+    });
+    content.querySelector('#addEvacRow').addEventListener('click', async ()=>{
+      EVACUATION.push({type:'מצב חדש', point:'', hotline:''});
+      await persist('evac-override', EVACUATION);
+      renderEmergency();
     });
   }
 }
@@ -611,11 +648,10 @@ function renderUnits(){
   const filtered = UNITS.filter(u =>
     matchesQuery(u.name) || matchesQuery(u.manager) || matchesQuery(u.chef) || matchesQuery(u.address)
   );
-  content.innerHTML = `<div id="unitsWrap"></div>`;
+  content.innerHTML = `<div id="unitsWrap"></div>${state.editMode ? '<button class="add-btn" id="addUnit">+ הוסף מתקן חדש</button>' : ''}`;
   const wrap = content.querySelector('#unitsWrap');
   if(filtered.length===0){
     wrap.innerHTML = `<div class="pending-box"><div class="big">🔍</div>לא נמצאו יחידות תואמות לחיפוש</div>`;
-    return;
   }
   filtered.forEach(u=>{
     const card = document.createElement('div');
@@ -650,6 +686,10 @@ function renderUnits(){
     } else {
       card.classList.add('open');
       detail.innerHTML = `
+        <div class="meta-edit-row" style="margin-bottom:8px;">
+          <input class="edit-in" data-mf="name" value="${esc(u.name)}" placeholder="שם המתקן" style="font-weight:700;">
+          <input class="edit-in" data-mf="type" value="${esc(u.type)}" placeholder="סוג (מסעדה / יחידת ייצור / מטה)">
+        </div>
         <div class="meta-edit-row" style="margin-bottom:8px;">
           <input class="edit-in" data-mf="manager" value="${esc(u.manager)}" placeholder="מנהל">
           <input class="edit-in" data-mf="chef" value="${esc(u.chef)}" placeholder="שף/אחראי">
@@ -710,6 +750,24 @@ function renderUnits(){
     }
     wrap.appendChild(card);
   });
+
+  if(state.editMode){
+    content.querySelector('#addUnit').addEventListener('click', async ()=>{
+      const newUnit = {
+        id: 'unit-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+        name: 'מתקן חדש', type: '', address: '', hours: '', manager: '', chef: '',
+        infra: {
+          'לוח חשמל ראשי':'', 'ברז מים ראשי':'', 'ברז גז ראשי':'', 'ארון תקשורת':'', 'שרת/מערכת מצלמות':'',
+          'כספת':'', 'מפתחות רזרביים':'', 'כניסת ספקים':'', 'קבלת סחורה':'',
+          'מחסן יבש':'', 'חדר קירור':'', 'חדר הקפאה':'', 'ציוד מיוחד':'', 'הערות תפעוליות':''
+        }
+      };
+      UNITS.push(newUnit);
+      state.openUnit = newUnit.id;
+      await persist('units-override', UNITS);
+      renderUnits();
+    });
+  }
 }
 
 // ---------------- CONTACTS ----------------
@@ -762,10 +820,12 @@ function renderContacts(){
       <div class="provider-edit-head">
         <input class="edit-in" data-pf="domain" value="${esc(p.domain)}" placeholder="תחום" style="font-weight:700;">
         <input class="edit-in" data-pf="company" value="${esc(p.company)}" placeholder="חברה">
+        <button class="del-x move-up" title="הזז למעלה">▲</button>
+        <button class="del-x move-down" title="הזז למטה">▼</button>
         <button class="del-x" title="מחק ספק">✕</button>
       </div>
       <input class="edit-in" data-pf="note" value="${esc(p.note||'')}" placeholder="הערה" style="margin-bottom:8px;">
-      <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">איש הקשר הראשון מוצג כראשי (הבוס) · השאר מוצגים כאופציה נוספת לחיוג</div>
+      <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">איש הקשר הראשון מוצג כראשי (הבוס) · השאר מוצגים כאופציה נוספת לחיוג · אפשר לסדר את סדר ההופעה עם החיצים</div>
       <div class="contactsListEdit"></div>
       <button class="add-btn small" data-add-contact="1">+ הוסף איש קשר</button>
     `;
@@ -775,8 +835,15 @@ function renderContacts(){
         await persist('providers-override', PROVIDERS);
       });
     });
-    block.querySelector('.del-x').addEventListener('click', async ()=>{
-      PROVIDERS.splice(pIdx,1);
+    block.querySelector('.move-up').addEventListener('click', async ()=>{
+      if(moveItem(PROVIDERS, PROVIDERS.indexOf(p), -1)){ await persist('providers-override', PROVIDERS); renderContacts(); }
+    });
+    block.querySelector('.move-down').addEventListener('click', async ()=>{
+      if(moveItem(PROVIDERS, PROVIDERS.indexOf(p), 1)){ await persist('providers-override', PROVIDERS); renderContacts(); }
+    });
+    block.querySelectorAll('.del-x')[2].addEventListener('click', async ()=>{
+      const i = PROVIDERS.indexOf(p);
+      if(i>-1) PROVIDERS.splice(i,1);
       await persist('providers-override', PROVIDERS);
       renderContacts();
     });
@@ -787,7 +854,9 @@ function renderContacts(){
       cRow.innerHTML = `
         <input class="edit-in" data-cf="name" value="${esc(c.name)}" placeholder="שם">
         <input class="edit-in" data-cf="phone" value="${esc(c.phone)}" placeholder="טלפון" style="direction:ltr; text-align:left;">
-        <button class="del-x">✕</button>
+        <button class="del-x move-up" title="הזז למעלה">▲</button>
+        <button class="del-x move-down" title="הזז למטה">▼</button>
+        <button class="del-x" title="מחק">✕</button>
       `;
       cRow.querySelectorAll('[data-cf]').forEach(inp=>{
         inp.addEventListener('change', async ()=>{
@@ -795,8 +864,15 @@ function renderContacts(){
           await persist('providers-override', PROVIDERS);
         });
       });
-      cRow.querySelector('.del-x').addEventListener('click', async ()=>{
-        p.contacts.splice(cIdx,1);
+      cRow.querySelector('.move-up').addEventListener('click', async ()=>{
+        if(moveItem(p.contacts, p.contacts.indexOf(c), -1)){ await persist('providers-override', PROVIDERS); renderContacts(); }
+      });
+      cRow.querySelector('.move-down').addEventListener('click', async ()=>{
+        if(moveItem(p.contacts, p.contacts.indexOf(c), 1)){ await persist('providers-override', PROVIDERS); renderContacts(); }
+      });
+      cRow.querySelectorAll('.del-x')[2].addEventListener('click', async ()=>{
+        const i = p.contacts.indexOf(c);
+        if(i>-1) p.contacts.splice(i,1);
         await persist('providers-override', PROVIDERS);
         renderContacts();
       });
@@ -851,6 +927,8 @@ function renderInternal(){
     row.innerHTML = `
       <div class="provider-edit-head">
         <input class="edit-in" data-if="name" value="${esc(p.name)}" placeholder="שם" style="font-weight:700;">
+        <button class="del-x move-up" title="הזז למעלה">▲</button>
+        <button class="del-x move-down" title="הזז למטה">▼</button>
         <button class="del-x" title="מחק">✕</button>
       </div>
       <div class="meta-edit-row">
@@ -865,8 +943,15 @@ function renderInternal(){
         await persist('internal-override', INTERNAL_CONTACTS);
       });
     });
-    row.querySelector('.del-x').addEventListener('click', async ()=>{
-      INTERNAL_CONTACTS.splice(pIdx,1);
+    row.querySelector('.move-up').addEventListener('click', async ()=>{
+      if(moveItem(INTERNAL_CONTACTS, INTERNAL_CONTACTS.indexOf(p), -1)){ await persist('internal-override', INTERNAL_CONTACTS); renderInternal(); }
+    });
+    row.querySelector('.move-down').addEventListener('click', async ()=>{
+      if(moveItem(INTERNAL_CONTACTS, INTERNAL_CONTACTS.indexOf(p), 1)){ await persist('internal-override', INTERNAL_CONTACTS); renderInternal(); }
+    });
+    row.querySelectorAll('.del-x')[2].addEventListener('click', async ()=>{
+      const i = INTERNAL_CONTACTS.indexOf(p);
+      if(i>-1) INTERNAL_CONTACTS.splice(i,1);
       await persist('internal-override', INTERNAL_CONTACTS);
       renderInternal();
     });
@@ -881,6 +966,14 @@ function renderInternal(){
 }
 
 // ---------------- LICENSES ----------------
+function uniqueFacilityName(base){
+  const existing = new Set(LICENSES.map(l=>l.unit));
+  if(!existing.has(base)) return base;
+  let i = 2;
+  while(existing.has(base + ' ' + i)) i++;
+  return base + ' ' + i;
+}
+
 function renderLicenses(){
   const content = document.getElementById('content');
   const filled = LICENSES.filter(l=>l.issuer||l.expiry).length;
@@ -902,10 +995,21 @@ function renderLicenses(){
     <div class="card">
       <div class="section-label">רישיונות ותעודות — ${filled}/${LICENSES.length} מולאו</div>
       <div class="note">מקובץ לפי מתקן — לחצו על מתקן כדי לפתוח</div>
+      ${state.editMode ? `<button class="add-btn" id="addFacilityLic">+ הוסף מתקן חדש</button>` : ''}
     </div>
     <div id="licGroupsWrap"></div>
   `;
   const wrap = content.querySelector('#licGroupsWrap');
+
+  if(state.editMode){
+    content.querySelector('#addFacilityLic').addEventListener('click', async ()=>{
+      const newName = uniqueFacilityName('מתקן חדש');
+      LICENSES.push({unit:newName, type:'מסמך חדש', issuer:'', issued:'', expiry:'', location:'', renewer:''});
+      state.openLicenseUnit = newName;
+      await persist('licenses-data', LICENSES);
+      renderLicenses();
+    });
+  }
 
   groups.forEach(g=>{
     const groupFilled = g.rows.filter(l=>l.issuer||l.expiry).length;
@@ -929,6 +1033,20 @@ function renderLicenses(){
         state.openLicenseUnit = state.openLicenseUnit===g.unit ? null : g.unit;
         renderLicenses();
       });
+    } else {
+      const nameRow = document.createElement('input');
+      nameRow.className = 'edit-in';
+      nameRow.value = g.unit;
+      nameRow.placeholder = 'שם המתקן';
+      nameRow.style.cssText = 'font-weight:700; margin-bottom:10px;';
+      nameRow.addEventListener('change', async ()=>{
+        const newName = nameRow.value.trim() || g.unit;
+        g.rows.forEach(l => l.unit = newName);
+        state.openLicenseUnit = newName;
+        await persist('licenses-data', LICENSES);
+        renderLicenses();
+      });
+      detail.appendChild(nameRow);
     }
 
     g.rows.forEach(l=>{
@@ -936,7 +1054,10 @@ function renderLicenses(){
       if(state.editMode){
         row.className = 'provider-block';
         row.innerHTML = `
-          <input class="edit-in" data-lf="type" value="${esc(l.type)}" placeholder="סוג מסמך" style="font-weight:700; margin-bottom:8px;">
+          <div class="provider-edit-head">
+            <input class="edit-in" data-lf="type" value="${esc(l.type)}" placeholder="סוג מסמך" style="font-weight:700;">
+            <button class="del-x" title="מחק מסמך">✕</button>
+          </div>
           <div class="meta-edit-row" style="margin-bottom:6px;">
             <input class="edit-in" data-lf="issuer" value="${esc(l.issuer)}" placeholder="גוף מנפיק">
             <input class="edit-in" data-lf="expiry" value="${esc(l.expiry)}" placeholder="תוקף DD/MM/YYYY">
@@ -951,6 +1072,12 @@ function renderLicenses(){
             l[inp.dataset.lf] = inp.value;
             await persist('licenses-data', LICENSES);
           });
+        });
+        row.querySelector('.del-x').addEventListener('click', async ()=>{
+          const i = LICENSES.indexOf(l);
+          if(i>-1) LICENSES.splice(i,1);
+          await persist('licenses-data', LICENSES);
+          renderLicenses();
         });
       } else {
         const bits = [
@@ -969,6 +1096,19 @@ function renderLicenses(){
       }
       detail.appendChild(row);
     });
+
+    if(state.editMode){
+      const addDocBtn = document.createElement('button');
+      addDocBtn.className = 'add-btn small';
+      addDocBtn.textContent = '+ הוסף מסמך';
+      addDocBtn.addEventListener('click', async ()=>{
+        LICENSES.push({unit:g.unit, type:'מסמך חדש', issuer:'', issued:'', expiry:'', location:'', renewer:''});
+        state.openLicenseUnit = g.unit;
+        await persist('licenses-data', LICENSES);
+        renderLicenses();
+      });
+      detail.appendChild(addDocBtn);
+    }
 
     wrap.appendChild(card);
   });
