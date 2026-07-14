@@ -1,4 +1,4 @@
-const CACHE_NAME = 'itzik-lo-po-v10';
+const CACHE_NAME = 'itzik-lo-po-v11';
 const APP_SHELL = [
   './',
   './index.html',
@@ -6,7 +6,8 @@ const APP_SHELL = [
   './icon-192.png',
   './icon-512.png',
   './icon-512-maskable.png',
-  './icon-180.png'
+  './icon-180.png',
+  './logo-header.png'
 ];
 
 self.addEventListener('install', (event) => {
