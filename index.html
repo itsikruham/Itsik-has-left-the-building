@@ -459,7 +459,7 @@ function defaultLicenses(){
   return rows;
 }
 
-let UNITS, PROVIDERS, DECISION_CHAIN, EVACUATION, INTERNAL_CONTACTS, LICENSES;
+let UNITS, PROVIDERS, DECISION_CHAIN, EVACUATION, INTERNAL_CONTACTS, LICENSES, SECTION_LOGOS;
 let state = { tab:'home', query:'', openFacility:null, openCategory:null, editMode:false };
 
 // Real, persistent on-device storage (works standalone / installed as an app — no external service needed)
@@ -486,6 +486,7 @@ async function loadData(){
     storageSet('internal-override', INTERNAL_CONTACTS);
   }
   LICENSES = storageGet('licenses-data') || defaultLicenses();
+  SECTION_LOGOS = storageGet('section-logos') || {};
 }
 
 function showSaved(){
@@ -502,6 +503,7 @@ function exportBackup(){
   const data = {
     units: UNITS, providers: PROVIDERS, chain: DECISION_CHAIN,
     evac: EVACUATION, internal: INTERNAL_CONTACTS, licenses: LICENSES,
+    sectionLogos: SECTION_LOGOS,
     exportedAt: new Date().toISOString()
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -525,6 +527,7 @@ async function importBackupFile(file){
     if(data.evac){ EVACUATION = data.evac; storageSet('evac-override', EVACUATION); }
     if(data.internal){ INTERNAL_CONTACTS = data.internal; storageSet('internal-override', INTERNAL_CONTACTS); }
     if(data.licenses){ LICENSES = data.licenses; storageSet('licenses-data', LICENSES); }
+    if(data.sectionLogos){ SECTION_LOGOS = data.sectionLogos; storageSet('section-logos', SECTION_LOGOS); }
     showSaved();
     render();
   }catch(e){
@@ -572,6 +575,7 @@ function moveItem(arr, index, direction){
 function renderEmergency(){
   const content = document.getElementById('content');
   content.innerHTML = `
+    ${sectionLogoHeaderHTML('emergency', 'חירום')}
     <div class="highlight-box">🔑 <b>מפתחות רזרביים</b> נשמרים ב\u2011<b>משרד הראשי</b> בכל היחידות — והמשרד הראשי <b>נגיש תמיד</b>.</div>
     <div class="card">
       <div class="section-label">שרשרת חירום — מי מחליט מה</div>
@@ -584,6 +588,7 @@ function renderEmergency(){
       ${state.editMode ? `<button class="add-btn small" id="addEvacRow">+ הוסף מצב חירום</button>` : ''}
     </div>
   `;
+  wireSectionLogoHeader(content, 'emergency');
   const chainWrap = content.querySelector('#chainWrap');
   if(!state.editMode){
     chainWrap.innerHTML = `
@@ -740,6 +745,57 @@ function newDefaultInfra(){
   };
 }
 
+// ---------------- SECTION LOGOS (אנשי קשר/אינדקס/חירום) ----------------
+function sectionLogoHeaderHTML(sectionId, titleText){
+  const logo = SECTION_LOGOS[sectionId] || '';
+  const fallbackIcon = (HOME_SECTIONS.find(s=>s.id===sectionId) || {}).icon || '❓';
+  return `
+    <div class="facility-header-row">
+      <div class="facility-header-logo" id="sectionLogoBox-${sectionId}">${logo ? `<img src="${logo}" alt="">` : `<span style="font-size:26px;">${fallbackIcon}</span>`}</div>
+      <div style="flex:1;">
+        <div class="unit-name">${titleText}</div>
+        ${state.editMode ? `
+          <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap;">
+            <input type="file" accept="image/*" id="sectionLogoInput-${sectionId}" style="display:none;">
+            <button class="add-btn small" id="sectionLogoBtn-${sectionId}" style="width:auto; margin-top:0;">${logo ? '↻ החלף לוגו' : '+ הוסף לוגו'}</button>
+            ${logo ? `<button class="add-btn small" id="sectionLogoRemoveBtn-${sectionId}" style="width:auto; margin-top:0;">✕ הסר לוגו</button>` : ''}
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function wireSectionLogoHeader(container, sectionId){
+  if(!state.editMode) return;
+  const input = container.querySelector('#sectionLogoInput-'+sectionId);
+  const btn = container.querySelector('#sectionLogoBtn-'+sectionId);
+  const removeBtn = container.querySelector('#sectionLogoRemoveBtn-'+sectionId);
+  if(btn && input){
+    btn.addEventListener('click', ()=> input.click());
+    input.addEventListener('change', async (ev)=>{
+      const file = ev.target.files[0];
+      if(!file) return;
+      try{
+        SECTION_LOGOS[sectionId] = await resizeImageFile(file, 240);
+        await persist('section-logos', SECTION_LOGOS);
+        render();
+      }catch(err){
+        console.error('logo resize failed', err);
+        alert('לא הצלחתי לטעון את התמונה');
+      }
+      ev.target.value = '';
+    });
+  }
+  if(removeBtn){
+    removeBtn.addEventListener('click', async ()=>{
+      SECTION_LOGOS[sectionId] = '';
+      await persist('section-logos', SECTION_LOGOS);
+      render();
+    });
+  }
+}
+
 // ---------------- FACILITIES (מתקנים: מתקן + בירוקרטיה מאוחדים) ----------------
 function renderHome(){
   const content = document.getElementById('content');
@@ -762,9 +818,10 @@ function renderHome(){
   filteredUnits.forEach(u=>{
     const tile = document.createElement('button');
     tile.className = 'facility-tile';
+    tile.title = u.name || 'מתקן ללא שם';
+    tile.setAttribute('aria-label', u.name || 'מתקן ללא שם');
     tile.innerHTML = `
       <div class="facility-logo">${u.logo ? `<img src="${u.logo}" alt="">` : `<span>${esc((u.name||'?').trim().slice(0,2))}</span>`}</div>
-      <div class="facility-name">${u.name || 'מתקן ללא שם'}</div>
     `;
     tile.addEventListener('click', ()=>{
       state.openFacility = u.id;
@@ -791,8 +848,9 @@ function renderHome(){
   HOME_SECTIONS.forEach(s=>{
     const tile = document.createElement('button');
     tile.className = 'facility-tile';
+    const sLogo = SECTION_LOGOS[s.id];
     tile.innerHTML = `
-      <div class="facility-logo"><span style="font-size:26px;">${s.icon}</span></div>
+      <div class="facility-logo">${sLogo ? `<img src="${sLogo}" alt="">` : `<span style="font-size:26px;">${s.icon}</span>`}</div>
       <div class="facility-name">${s.name}</div>
     `;
     tile.addEventListener('click', ()=>{
@@ -1061,7 +1119,11 @@ function renderContacts(){
   const filtered = PROVIDERS.filter(p =>
     matchesQuery(p.domain) || matchesQuery(p.company) || p.contacts.some(c=>matchesQuery(c.name))
   );
-  content.innerHTML = `<div class="card"><div class="section-label">נותני שירות (${filtered.length})</div><div id="contactsWrap"></div>${state.editMode ? '<button class="add-btn" id="addProvider">+ הוסף ספק</button>' : ''}</div>`;
+  content.innerHTML = `
+    ${sectionLogoHeaderHTML('contacts', 'אנשי קשר וספקים')}
+    <div class="card"><div class="section-label">נותני שירות (${filtered.length})</div><div id="contactsWrap"></div>${state.editMode ? '<button class="add-btn" id="addProvider">+ הוסף ספק</button>' : ''}</div>
+  `;
+  wireSectionLogoHeader(content, 'contacts');
   const wrap = content.querySelector('#contactsWrap');
   if(filtered.length===0 && !state.editMode){
     wrap.innerHTML = `<div class="pending-box"><div class="big">🔍</div>לא נמצאו ספקים תואמים לחיפוש</div>`;
@@ -1182,6 +1244,7 @@ function renderContacts(){
 function renderInternal(){
   const content = document.getElementById('content');
   content.innerHTML = `
+    ${sectionLogoHeaderHTML('internal', 'אינדקס')}
     <div class="card">
       <div class="section-label">אינדקס אנשי קשר</div>
       <div class="note">מקובץ לפי קטגוריה — לחצו על קטגוריה כדי לפתוח</div>
@@ -1189,6 +1252,7 @@ function renderInternal(){
     </div>
     <div id="categoriesWrap"></div>
   `;
+  wireSectionLogoHeader(content, 'internal');
   const wrap = content.querySelector('#categoriesWrap');
 
   if(state.editMode){
