@@ -244,6 +244,7 @@
   .save-note.show{ opacity:1; }
 
   .source-note{ text-align:center; color:var(--muted); font-size:11.5px; margin:26px 0 6px; }
+  .copyright-note{ text-align:center; color:var(--muted); font-size:11px; opacity:.7; margin:0 0 6px; }
 
   /* facilities grid + dedicated facility page */
   .facility-grid{ display:grid; grid-template-columns:repeat(auto-fit, 78px); justify-content:center; gap:18px 12px; margin-bottom:14px; }
@@ -313,6 +314,7 @@
 <main id="content"></main>
 
 <div class="source-note">מקור בסיס: ספר ההפעלה (Excel) · עריכות נשמרות אוטומטית על המכשיר הזה · מומלץ לייצא גיבוי מדי פעם ולשתף בין מכשירים</div>
+<div class="copyright-note">© כל הזכויות שמורות לאיציק רוחם</div>
 <div class="save-note" id="saveNote">נשמר ✓</div>
 
 <script>
@@ -481,9 +483,15 @@ function closeAllDialMenus(){
 }
 document.addEventListener('click', ()=> closeAllDialMenus());
 
+function updateDialStripSpacing(){
+  const wrap = document.getElementById('dialStrip');
+  const h = (QUICK_DIAL && QUICK_DIAL.length) ? wrap.offsetHeight : 0;
+  document.body.style.paddingBottom = (h + 24) + 'px';
+}
+
 function renderDialStrip(){
   const wrap = document.getElementById('dialStrip');
-  if(!QUICK_DIAL || !QUICK_DIAL.length){ wrap.innerHTML = ''; return; }
+  if(!QUICK_DIAL || !QUICK_DIAL.length){ wrap.innerHTML = ''; updateDialStripSpacing(); return; }
   wrap.innerHTML = QUICK_DIAL.map((e,i)=>`
     <div class="dial-item" data-i="${i}">
       <button class="dial-circle" type="button" title="${esc(e.label)} — ${esc(e.phone)}">${e.logo ? `<img src="${e.logo}" alt="">` : esc(dialInitials(e.label))}</button>
@@ -547,7 +555,7 @@ function renderEmergency(){
       ${state.editMode ? `<button class="add-btn small" id="addEvacRow">+ הוסף מצב חירום</button>` : ''}
     </div>
     <div class="card">
-      <div class="section-label">חיוג מהיר (העיגולים הצפים בצד המסך)</div>
+      <div class="section-label">חיוג מהיר (הרצועה התחתונה בכל מסך)</div>
       <div id="dialEditWrap"></div>
       ${state.editMode ? `<button class="add-btn small" id="addDialRow">+ הוסף איש קשר לחיוג מהיר</button>` : ''}
     </div>
@@ -1549,6 +1557,12 @@ if('serviceWorker' in navigator){
   render();
   renderDialStrip();
 })();
+
+let _dialResizeTimer;
+window.addEventListener('resize', ()=>{
+  clearTimeout(_dialResizeTimer);
+  _dialResizeTimer = setTimeout(updateDialStripSpacing, 150);
+});
 </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'itzik-lo-po-v13';
+const CACHE_NAME = 'itzik-lo-po-v14';
 const APP_SHELL = [
   './',
   './index.html',
