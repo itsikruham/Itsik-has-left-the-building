@@ -1,6 +1,6 @@
 {
-  "name": "איציק לא פה — תיק חירום ותפעול",
-  "short_name": "איציק לא פה",
+  "name": "ITSIK HAS LEFT THE BUILDING",
+  "short_name": "ITSIK HAS LEFT",
   "description": "תיק חירום ותפעול לקבוצת מחניודה — גישה מהירה ליחידות, אנשי קשר, ספקים, תשתיות ונהלי חירום",
   "start_url": "./index.html",
   "scope": "./",
@@ -12,8 +12,23 @@
   "dir": "rtl",
   "lang": "he",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
